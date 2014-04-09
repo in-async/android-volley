@@ -97,9 +97,16 @@ public class BasicNetwork implements Network {
                 responseHeaders = convertHeaders(httpResponse.getAllHeaders());
                 // Handle cache validation.
                 if (statusCode == HttpStatus.SC_NOT_MODIFIED) {
-                    return new NetworkResponse(HttpStatus.SC_NOT_MODIFIED,
-                            request.getCacheEntry() == null ? null : request.getCacheEntry().data,
-                            responseHeaders, true);
+                    // 14/04/09 304 時の応答ヘッダーが無意味なものになっているので、
+                    // キャッシュされているヘッダーを使用するよう修正
+                    // http://kyokomi.hatenablog.com/entry/2013/12/02/013252
+//                    return new NetworkResponse(HttpStatus.SC_NOT_MODIFIED,
+//                            request.getCacheEntry() == null ? null : request.getCacheEntry().data,
+//                            responseHeaders, true);
+                    return (request.getCacheEntry() == null)?
+                            new NetworkResponse(HttpStatus.SC_NOT_MODIFIED, null, responseHeaders, true):
+                            new NetworkResponse(HttpStatus.SC_NOT_MODIFIED,
+                                    request.getCacheEntry().data, request.getCacheEntry().responseHeaders, true);
                 }
 
                 // Some responses such as 204s do not have content.  We must check.
