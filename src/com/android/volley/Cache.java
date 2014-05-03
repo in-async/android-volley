@@ -61,6 +61,8 @@ public interface Cache {
      */
     public void clear();
 
+    public void setMaxCacheSizeInBytes(int cacheSize);
+
     /**
      * Data and metadata for an entry returned by the cache.
      */

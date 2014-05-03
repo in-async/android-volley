@@ -21,6 +21,7 @@ import android.os.SystemClock;
 import com.android.volley.Cache;
 import com.android.volley.VolleyLog;
 
+import java.io.BufferedInputStream;
 import java.io.EOFException;
 import java.io.File;
 import java.io.FileInputStream;
@@ -29,6 +30,7 @@ import java.io.FilterInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.nio.charset.Charset;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Iterator;
@@ -52,7 +54,7 @@ public class DiskBasedCache implements Cache {
     private final File mRootDirectory;
 
     /** The maximum size of the cache in bytes. */
-    private final int mMaxCacheSizeInBytes;
+    private /*final*/ int mMaxCacheSizeInBytes;
 
     /** Default maximum disk usage in bytes. */
     private static final int DEFAULT_DISK_USAGE_BYTES = 5 * 1024 * 1024;
@@ -62,6 +64,13 @@ public class DiskBasedCache implements Cache {
 
     /** Magic number for current version of cache file format. */
     private static final int CACHE_MAGIC = 0x20120504;
+
+    private static final Charset mCharset = Charset.forName("UTF-8");
+    private final byte[] mBuffer = new byte[4096];
+
+    public void setMaxCacheSizeInBytes(int cacheSize) {
+        mMaxCacheSizeInBytes = cacheSize;
+    }
 
     /**
      * Constructs an instance of the DiskBasedCache at the specified directory.
@@ -113,8 +122,8 @@ public class DiskBasedCache implements Cache {
         CountingInputStream cis = null;
         try {
             cis = new CountingInputStream(new FileInputStream(file));
-            CacheHeader.readHeader(cis); // eat header
-            byte[] data = streamToBytes(cis, (int) (file.length() - cis.bytesRead));
+            CacheHeader.readHeader(cis, mBuffer); // eat header
+            byte[] data = streamToBytes(cis, (int) (file.length() - cis.bytesRead), null);
             return entry.toCacheEntry(data);
         } catch (IOException e) {
             VolleyLog.d("%s: %s", file.getAbsolutePath(), e.toString());
@@ -149,15 +158,15 @@ public class DiskBasedCache implements Cache {
             return;
         }
         for (File file : files) {
-            FileInputStream fis = null;
+            BufferedInputStream fis = null;
             try {
-                fis = new FileInputStream(file);
-                CacheHeader entry = CacheHeader.readHeader(fis);
+                fis = new BufferedInputStream(new FileInputStream(file));
+                CacheHeader entry = CacheHeader.readHeader(fis, mBuffer);
                 entry.size = file.length();
                 putEntry(entry.key, entry);
             } catch (IOException e) {
                 if (file != null) {
-                   file.delete();
+                    file.delete();
                 }
             } finally {
                 try {
@@ -266,8 +275,8 @@ public class DiskBasedCache implements Cache {
             if (deleted) {
                 mTotalSize -= e.size;
             } else {
-               VolleyLog.d("Could not delete cache entry for key=%s, filename=%s",
-                       e.key, getFilenameForKey(e.key));
+                VolleyLog.d("Could not delete cache entry for key=%s, filename=%s",
+                        e.key, getFilenameForKey(e.key));
             }
             iterator.remove();
             prunedFiles++;
@@ -312,8 +321,12 @@ public class DiskBasedCache implements Cache {
     /**
      * Reads the contents of an InputStream into a byte[].
      * */
-    private static byte[] streamToBytes(InputStream in, int length) throws IOException {
-        byte[] bytes = new byte[length];
+    private static byte[] streamToBytes(InputStream in, int length, byte[] buff) throws IOException {
+        byte[] bytes = buff;
+        if (bytes == null || bytes.length < length) {
+            bytes = new byte[length];
+        }
+
         int count;
         int pos = 0;
         while (pos < length && ((count = in.read(bytes, pos, length - pos)) != -1)) {
@@ -374,22 +387,22 @@ public class DiskBasedCache implements Cache {
          * @param is The InputStream to read from.
          * @throws IOException
          */
-        public static CacheHeader readHeader(InputStream is) throws IOException {
+        public static CacheHeader readHeader(InputStream is, byte[] buff) throws IOException {
             CacheHeader entry = new CacheHeader();
-            int magic = readInt(is);
+            int magic = readInt(is, buff);
             if (magic != CACHE_MAGIC) {
                 // don't bother deleting, it'll get pruned eventually
                 throw new IOException();
             }
-            entry.key = readString(is);
-            entry.etag = readString(is);
+            entry.key = readString(is, buff);
+            entry.etag = readString(is, buff);
             if (entry.etag.equals("")) {
                 entry.etag = null;
             }
-            entry.serverDate = readLong(is);
-            entry.ttl = readLong(is);
-            entry.softTtl = readLong(is);
-            entry.responseHeaders = readStringStringMap(is);
+            entry.serverDate = readLong(is, buff);
+            entry.ttl = readLong(is, buff);
+            entry.softTtl = readLong(is, buff);
+            entry.responseHeaders = readStringStringMap(is, buff);
             return entry;
         }
 
@@ -474,6 +487,16 @@ public class DiskBasedCache implements Cache {
         }
         return b;
     }
+    private static void read(final InputStream in, final byte[] buff, final int length) throws IOException {
+        int count;
+        int pos = 0;
+        while (pos < length && ((count = in.read(buff, pos, length - pos)) != -1)) {
+            pos += count;
+        }
+        if (pos != length) {
+            throw new IOException("Expected " + length + " bytes, read " + pos + " bytes");
+        }
+    }
 
     static void writeInt(OutputStream os, int n) throws IOException {
         os.write((n >> 0) & 0xff);
@@ -482,12 +505,17 @@ public class DiskBasedCache implements Cache {
         os.write((n >> 24) & 0xff);
     }
 
-    static int readInt(InputStream is) throws IOException {
+    static int readInt(final InputStream is, final byte[] buff) throws IOException {
         int n = 0;
-        n |= (read(is) << 0);
-        n |= (read(is) << 8);
-        n |= (read(is) << 16);
-        n |= (read(is) << 24);
+//        n |= (read(is) << 0);
+//        n |= (read(is) << 8);
+//        n |= (read(is) << 16);
+//        n |= (read(is) << 24);
+        read(is, buff, 4);
+        n = buff[0]
+            | (buff[1] << 8)
+            | (buff[2] << 16)
+            | (buff[3] << 24);
         return n;
     }
 
@@ -502,29 +530,38 @@ public class DiskBasedCache implements Cache {
         os.write((byte)(n >>> 56));
     }
 
-    static long readLong(InputStream is) throws IOException {
+    static long readLong(final InputStream is, final byte[] buff) throws IOException {
         long n = 0;
-        n |= ((read(is) & 0xFFL) << 0);
-        n |= ((read(is) & 0xFFL) << 8);
-        n |= ((read(is) & 0xFFL) << 16);
-        n |= ((read(is) & 0xFFL) << 24);
-        n |= ((read(is) & 0xFFL) << 32);
-        n |= ((read(is) & 0xFFL) << 40);
-        n |= ((read(is) & 0xFFL) << 48);
-        n |= ((read(is) & 0xFFL) << 56);
+//        n |= ((read(is) & 0xFFL) << 0);
+//        n |= ((read(is) & 0xFFL) << 8);
+//        n |= ((read(is) & 0xFFL) << 16);
+//        n |= ((read(is) & 0xFFL) << 24);
+//        n |= ((read(is) & 0xFFL) << 32);
+//        n |= ((read(is) & 0xFFL) << 40);
+//        n |= ((read(is) & 0xFFL) << 48);
+//        n |= ((read(is) & 0xFFL) << 56);
+        read(is, buff, 8);
+        n = buff[0]
+            | (buff[1] << 8)
+            | (buff[2] << 16)
+            | (buff[3] << 24)
+            | ((long)buff[4] << 32)
+            | ((long)buff[5] << 40)
+            | ((long)buff[6] << 48)
+            | ((long)buff[7] << 56);
         return n;
     }
 
     static void writeString(OutputStream os, String s) throws IOException {
-        byte[] b = s.getBytes("UTF-8");
+        byte[] b = s.getBytes(mCharset);
         writeLong(os, b.length);
         os.write(b, 0, b.length);
     }
 
-    static String readString(InputStream is) throws IOException {
-        int n = (int) readLong(is);
-        byte[] b = streamToBytes(is, n);
-        return new String(b, "UTF-8");
+    static String readString(InputStream is, byte[] buff) throws IOException {
+        int n = (int) readLong(is, buff);
+        byte[] b = streamToBytes(is, n, buff);
+        return new String(b, 0, n, mCharset);
     }
 
     static void writeStringStringMap(Map<String, String> map, OutputStream os) throws IOException {
@@ -539,14 +576,14 @@ public class DiskBasedCache implements Cache {
         }
     }
 
-    static Map<String, String> readStringStringMap(InputStream is) throws IOException {
-        int size = readInt(is);
+    static Map<String, String> readStringStringMap(InputStream is, byte[] buff) throws IOException {
+        int size = readInt(is, buff);
         Map<String, String> result = (size == 0)
                 ? Collections.<String, String>emptyMap()
                 : new HashMap<String, String>(size);
         for (int i = 0; i < size; i++) {
-            String key = readString(is).intern();
-            String value = readString(is).intern();
+            String key = readString(is, buff).intern();
+            String value = readString(is, buff).intern();
             result.put(key, value);
         }
         return result;
