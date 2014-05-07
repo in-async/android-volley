@@ -49,4 +49,8 @@ public class NoCache implements Cache {
 
     @Override
     public void setMaxCacheSizeInBytes(int cacheSize) {}
+    @Override
+    public long getCacheTotalSize() {
+        return 0;
+    }
 }

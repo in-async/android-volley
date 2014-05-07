@@ -68,8 +68,17 @@ public class DiskBasedCache implements Cache {
     private static final Charset mCharset = Charset.forName("UTF-8");
     private final byte[] mBuffer = new byte[4096];
 
+    /*
+        最大キャッシュサイズを設定します。
+     */
     public void setMaxCacheSizeInBytes(int cacheSize) {
         mMaxCacheSizeInBytes = cacheSize;
+    }
+    /*
+        現在使用中のキャッシュサイズを取得します。
+     */
+    public long getCacheTotalSize() {
+        return mTotalSize;
     }
 
     /**
@@ -431,7 +440,15 @@ public class DiskBasedCache implements Cache {
                 writeString(os, etag == null ? "" : etag);
                 writeLong(os, serverDate);
                 writeLong(os, ttl);
-                writeLong(os, softTtl);
+                if (softTtl == Long.MAX_VALUE) {
+                    // アプリ終了後にキャッシュを期限切れとしたい場合に ttl を最大値に設定しているので、
+                    // ここでは softTtl に 0 と記録し、次回読み取り時に期限切れとする。
+                    // 但し、次回読み取り時にネットワークにつながっていない場合にキャッシュを表示させたい為、
+                    // ttl はそのままにする
+                    writeLong(os, 0);
+                } else {
+                    writeLong(os, softTtl);
+                }
                 writeStringStringMap(responseHeaders, os);
                 os.flush();
                 return true;
@@ -512,10 +529,10 @@ public class DiskBasedCache implements Cache {
 //        n |= (read(is) << 16);
 //        n |= (read(is) << 24);
         read(is, buff, 4);
-        n = buff[0]
-            | (buff[1] << 8)
-            | (buff[2] << 16)
-            | (buff[3] << 24);
+        n = (buff[0] & 0xff)
+            | ((buff[1] & 0xff) << 8)
+            | ((buff[2] & 0xff) << 16)
+            | ((buff[3] & 0xff) << 24);
         return n;
     }
 
@@ -541,14 +558,14 @@ public class DiskBasedCache implements Cache {
 //        n |= ((read(is) & 0xFFL) << 48);
 //        n |= ((read(is) & 0xFFL) << 56);
         read(is, buff, 8);
-        n = buff[0]
-            | (buff[1] << 8)
-            | (buff[2] << 16)
-            | (buff[3] << 24)
-            | ((long)buff[4] << 32)
-            | ((long)buff[5] << 40)
-            | ((long)buff[6] << 48)
-            | ((long)buff[7] << 56);
+        n = (buff[0] & 0xff)
+            | ((buff[1] & 0xff) << 8)
+            | ((buff[2] & 0xff) << 16)
+            | ((buff[3] & 0xffL) << 24)
+            | ((buff[4] & 0xffL) << 32)
+            | ((buff[5] & 0xffL) << 40)
+            | ((buff[6] & 0xffL) << 48)
+            | ((buff[7] & 0xffL) << 56);
         return n;
     }
 

@@ -61,7 +61,14 @@ public interface Cache {
      */
     public void clear();
 
+    /*
+        最大キャッシュサイズを設定します。
+     */
     public void setMaxCacheSizeInBytes(int cacheSize);
+    /*
+        現在使用中のキャッシュサイズを取得します。
+     */
+    public long getCacheTotalSize();
 
     /**
      * Data and metadata for an entry returned by the cache.
