@@ -77,13 +77,6 @@ public class DefaultRetryPolicy implements RetryPolicy {
     }
 
     /**
-     * Returns the backoff multiplier for the policy.
-     */
-    public float getBackoffMultiplier() {
-        return mBackoffMultiplier;
-    }
-
-    /**
      * Prepares for the next retry by applying a backoff to the timeout.
      * @param error The error code of the last attempt.
      */

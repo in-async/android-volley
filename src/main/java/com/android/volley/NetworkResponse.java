@@ -34,25 +34,26 @@ public class NetworkResponse {
      * @param networkTimeMs Round-trip network time to receive network response
      */
     public NetworkResponse(int statusCode, byte[] data, Map<String, String> headers,
-            boolean notModified, long networkTimeMs) {
+            String url, boolean notModified, long networkTimeMs) {
         this.statusCode = statusCode;
         this.data = data;
         this.headers = headers;
+        this.url = url;
         this.notModified = notModified;
         this.networkTimeMs = networkTimeMs;
     }
 
     public NetworkResponse(int statusCode, byte[] data, Map<String, String> headers,
-            boolean notModified) {
-        this(statusCode, data, headers, notModified, 0);
+            String url, boolean notModified) {
+        this(statusCode, data, headers, url, notModified, 0);
     }
 
-    public NetworkResponse(byte[] data) {
-        this(HttpStatus.SC_OK, data, Collections.<String, String>emptyMap(), false, 0);
+    public NetworkResponse(byte[] data, String url) {
+        this(HttpStatus.SC_OK, data, Collections.<String, String>emptyMap(), url, false, 0);
     }
 
-    public NetworkResponse(byte[] data, Map<String, String> headers) {
-        this(HttpStatus.SC_OK, data, headers, false, 0);
+    public NetworkResponse(byte[] data, Map<String, String> headers, String url) {
+        this(HttpStatus.SC_OK, data, headers, url, false, 0);
     }
 
     /** The HTTP status code. */
@@ -69,5 +70,6 @@ public class NetworkResponse {
 
     /** Network roundtrip time in milliseconds. */
     public final long networkTimeMs;
-}
 
+    public final String url;
+}

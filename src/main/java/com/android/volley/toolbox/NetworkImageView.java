@@ -16,11 +16,16 @@
 package com.android.volley.toolbox;
 
 import android.content.Context;
+import android.graphics.Bitmap;
+import android.graphics.Canvas;
+import android.graphics.drawable.BitmapDrawable;
+import android.graphics.drawable.Drawable;
 import android.text.TextUtils;
 import android.util.AttributeSet;
 import android.view.ViewGroup.LayoutParams;
 import android.widget.ImageView;
 
+import com.android.volley.Response;
 import com.android.volley.VolleyError;
 import com.android.volley.toolbox.ImageLoader.ImageContainer;
 import com.android.volley.toolbox.ImageLoader.ImageListener;
@@ -48,6 +53,19 @@ public class NetworkImageView extends ImageView {
 
     /** Current ImageContainer. (either in-flight or finished) */
     private ImageContainer mImageContainer;
+
+    public interface OnResponseBitmapListener {
+        boolean onResponseBitmap(ImageContainer container, boolean isImmediate);
+    }
+    private OnResponseBitmapListener mOnResponseBitmapListener;
+    public void setOnResponseBitmapListener(OnResponseBitmapListener listener) {
+        mOnResponseBitmapListener = listener;
+    }
+    // 14/07/09 追加
+    private ImageListener mImageListener;
+    public void setImageListener(ImageListener l) {
+        mImageListener = l;
+    }
 
     public NetworkImageView(Context context) {
         this(context, null);
@@ -79,7 +97,7 @@ public class NetworkImageView extends ImageView {
         // The URL has potentially changed. See if we need to load it.
         loadImageIfNecessary(false);
     }
-    
+
     /**
      * Gets the URL of the image that should be loaded into this view, or null if no URL has been set.
      * The image may or may not already be downloaded and set into the view.
@@ -161,6 +179,11 @@ public class NetworkImageView extends ImageView {
                 new ImageListener() {
                     @Override
                     public void onErrorResponse(VolleyError error) {
+                        // 14/07/09 追加
+                        if (mImageListener != null) {
+                            mImageListener.onErrorResponse(error);
+                        }
+
                         if (mErrorImageId != 0) {
                             setImageResource(mErrorImageId);
                         }
@@ -183,7 +206,19 @@ public class NetworkImageView extends ImageView {
                         }
 
                         if (response.getBitmap() != null) {
-                            setImageBitmap(response.getBitmap());
+                            // 14/07/09 追加
+                            if (mImageListener != null) {
+                                mImageListener.onResponse(response, isImmediate);
+                            }
+
+                            // 14/06/27 追加
+                            boolean handled = false;
+                            if (mOnResponseBitmapListener != null) {
+                                handled = mOnResponseBitmapListener.onResponseBitmap(response, isImmediate);
+                            }
+                            if (handled == false) {
+                                setImageBitmap(response.getBitmap().bitmap);
+                            }
                         } else if (mDefaultImageId != 0) {
                             setImageResource(mDefaultImageId);
                         }
@@ -206,7 +241,11 @@ public class NetworkImageView extends ImageView {
     @Override
     protected void onLayout(boolean changed, int left, int top, int right, int bottom) {
         super.onLayout(changed, left, top, right, bottom);
-        loadImageIfNecessary(true);
+        // 14/06/20 ViewPager で使用する為の修正
+        // http://y-anz-m.blogspot.jp/2013/11/viewpager-volley-networkimageview.html
+        if (changed && mUrl != null) {
+            loadImageIfNecessary(true);
+        }
     }
 
     @Override
@@ -227,4 +266,19 @@ public class NetworkImageView extends ImageView {
         super.drawableStateChanged();
         invalidate();
     }
-}
+
+    /*
+        14/06/23 キャッシュアウト等によりリサイクル済みとなったビットマップを描画に使用しないよう対応
+     */
+    @Override
+    protected void onDraw(Canvas canvas) {
+        // 設定されている Bitmap が既にリサイクル済みなら、描画しない
+        Drawable drawable = getDrawable();
+        Bitmap bmp;
+        if (drawable instanceof BitmapDrawable
+                && (bmp = ((BitmapDrawable)drawable).getBitmap()) != null
+                && bmp.isRecycled())
+            return;
+
+        super.onDraw(canvas);
+    }}

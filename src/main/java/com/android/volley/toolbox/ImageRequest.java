@@ -42,11 +42,28 @@ public class ImageRequest extends Request<Bitmap> {
     /** Default backoff multiplier for image requests */
     private static final float IMAGE_BACKOFF_MULT = 2f;
 
-    private final Response.Listener<Bitmap> mListener;
+    private Response.Listener<Bitmap> mListener;
     private final Config mDecodeConfig;
     private final int mMaxWidth;
     private final int mMaxHeight;
     private ScaleType mScaleType;
+
+    // 14/06/26 追加
+    private int mImageBytes;
+    private int mActualWidth;
+    private int mActualHeight;
+    public int getImageBytes() {
+        return mImageBytes;
+    }
+    public int getActualWidth() {
+        return mActualWidth;
+    }
+    public int getActualHeight() {
+        return mActualHeight;
+    }
+    public void setListener(Response.Listener<Bitmap> listener) {
+        mListener = listener;
+    }
 
     /** Decoding lock so that we don't decode more than one image at a time (to avoid OOM's) */
     private static final Object sDecodeLock = new Object();
@@ -71,7 +88,7 @@ public class ImageRequest extends Request<Bitmap> {
      */
     public ImageRequest(String url, Response.Listener<Bitmap> listener, int maxWidth, int maxHeight,
             ScaleType scaleType, Config decodeConfig, Response.ErrorListener errorListener) {
-        super(Method.GET, url, errorListener); 
+        super(Method.GET, url, errorListener);
         setRetryPolicy(
                 new DefaultRetryPolicy(IMAGE_TIMEOUT_MS, IMAGE_MAX_RETRIES, IMAGE_BACKOFF_MULT));
         mListener = listener;
@@ -169,17 +186,24 @@ public class ImageRequest extends Request<Bitmap> {
      */
     private Response<Bitmap> doParse(NetworkResponse response) {
         byte[] data = response.data;
+        mImageBytes = data.length;
         BitmapFactory.Options decodeOptions = new BitmapFactory.Options();
         Bitmap bitmap = null;
         if (mMaxWidth == 0 && mMaxHeight == 0) {
             decodeOptions.inPreferredConfig = mDecodeConfig;
             bitmap = BitmapFactory.decodeByteArray(data, 0, data.length, decodeOptions);
+            // 14/06/26 追加
+            mActualWidth = bitmap.getWidth();
+            mActualHeight = bitmap.getHeight();
         } else {
             // If we have to resize this image, first get the natural bounds.
             decodeOptions.inJustDecodeBounds = true;
             BitmapFactory.decodeByteArray(data, 0, data.length, decodeOptions);
             int actualWidth = decodeOptions.outWidth;
             int actualHeight = decodeOptions.outHeight;
+            // 14/06/26 追加
+            mActualWidth = actualWidth;
+            mActualHeight = actualHeight;
 
             // Then compute the dimensions we would ideally like to decode to.
             int desiredWidth = getResizedDimension(mMaxWidth, mMaxHeight,
@@ -210,7 +234,7 @@ public class ImageRequest extends Request<Bitmap> {
         if (bitmap == null) {
             return Response.error(new ParseError(response));
         } else {
-            return Response.success(bitmap, HttpHeaderParser.parseCacheHeaders(response));
+            return Response.success(bitmap, HttpHeaderParser.parseCacheHeaders(response, getUrl()));
         }
     }
 

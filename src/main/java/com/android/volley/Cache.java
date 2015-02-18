@@ -95,6 +95,8 @@ public interface Cache {
         /** Immutable response headers as received from server; must be non-null. */
         public Map<String, String> responseHeaders = Collections.emptyMap();
 
+        public String responseUrl;
+
         /** True if the entry is expired. */
         public boolean isExpired() {
             return this.ttl < System.currentTimeMillis();

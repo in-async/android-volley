@@ -382,6 +382,8 @@ public class DiskBasedCache implements Cache {
         /** Headers from the response resulting in this cache entry. */
         public Map<String, String> responseHeaders;
 
+        public String responseUrl;
+
         private CacheHeader() { }
 
         /**
@@ -398,6 +400,7 @@ public class DiskBasedCache implements Cache {
             this.ttl = entry.ttl;
             this.softTtl = entry.softTtl;
             this.responseHeaders = entry.responseHeaders;
+            this.responseUrl = entry.responseUrl;
         }
 
         /**
@@ -421,7 +424,7 @@ public class DiskBasedCache implements Cache {
             entry.ttl = readLong(is, buff);
             entry.softTtl = readLong(is, buff);
             entry.responseHeaders = readStringStringMap(is, buff);
-
+            entry.responseUrl = readString(is, buff);
             try {
                 entry.lastModified = readLong(is, buff);
             } catch (EOFException e) {
@@ -443,6 +446,7 @@ public class DiskBasedCache implements Cache {
             e.ttl = ttl;
             e.softTtl = softTtl;
             e.responseHeaders = responseHeaders;
+            e.responseUrl = responseUrl;
             return e;
         }
 
@@ -468,6 +472,7 @@ public class DiskBasedCache implements Cache {
                 }
                 writeStringStringMap(responseHeaders, os);
                 writeLong(os, lastModified);
+                writeString(os, responseUrl);
                 os.flush();
                 return true;
             } catch (IOException e) {

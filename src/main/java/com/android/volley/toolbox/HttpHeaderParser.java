@@ -36,7 +36,7 @@ public class HttpHeaderParser {
      * @param response The network response to parse headers from
      * @return a cache entry for the given response, or null if the response is not cacheable.
      */
-    public static Cache.Entry parseCacheHeaders(NetworkResponse response) {
+    public static Cache.Entry parseCacheHeaders(NetworkResponse response, String responseUrl) {
         long now = System.currentTimeMillis();
 
         Map<String, String> headers = response.headers;
@@ -113,6 +113,7 @@ public class HttpHeaderParser {
         entry.serverDate = serverDate;
         entry.lastModified = lastModified;
         entry.responseHeaders = headers;
+        entry.responseUrl = responseUrl;
 
         return entry;
     }

@@ -27,6 +27,7 @@ import com.android.volley.RequestQueue;
 import com.android.volley.Response.ErrorListener;
 import com.android.volley.Response.Listener;
 import com.android.volley.VolleyError;
+import com.android.volley.toolbox.ImageRequest;
 
 import java.util.HashMap;
 import java.util.LinkedList;
@@ -73,8 +74,11 @@ public class ImageLoader {
      * must not block. Implementation with an LruCache is recommended.
      */
     public interface ImageCache {
-        public Bitmap getBitmap(String url);
-        public void putBitmap(String url, Bitmap bitmap);
+        public BitmapAndSize getBitmap(String url);
+        public void putBitmap(String url, BitmapAndSize bitmap);
+    }
+    public ImageCache getImageCache() {
+        return mCache;
     }
 
     /**
@@ -108,7 +112,7 @@ public class ImageLoader {
             @Override
             public void onResponse(ImageContainer response, boolean isImmediate) {
                 if (response.getBitmap() != null) {
-                    view.setImageBitmap(response.getBitmap());
+                    view.setImageBitmap(response.getBitmap().bitmap);
                 } else if (defaultImageResId != 0) {
                     view.setImageResource(defaultImageResId);
                 }
@@ -202,7 +206,7 @@ public class ImageLoader {
         final String cacheKey = getCacheKey(requestUrl, maxWidth, maxHeight);
 
         // Try to look up the request in the cache of remote images.
-        Bitmap cachedBitmap = mCache.getBitmap(cacheKey);
+        BitmapAndSize cachedBitmap = mCache.getBitmap(cacheKey);
         if (cachedBitmap != null) {
             // Return the cached bitmap.
             ImageContainer container = new ImageContainer(cachedBitmap, requestUrl, null, null);
@@ -219,7 +223,7 @@ public class ImageLoader {
 
         // Check to see if a request is already in-flight.
         BatchedImageRequest request = mInFlightRequests.get(cacheKey);
-        if (request != null) {
+        if (request != null && request.mRequest.isCanceled() == false) {
             // If it is, add this request to the list of listeners.
             request.addContainer(imageContainer);
             return imageContainer;
@@ -238,17 +242,21 @@ public class ImageLoader {
 
     protected Request<Bitmap> makeImageRequest(String requestUrl, int maxWidth, int maxHeight,
             ScaleType scaleType, final String cacheKey) {
-        return new ImageRequest(requestUrl, new Listener<Bitmap>() {
-            @Override
-            public void onResponse(Bitmap response) {
-                onGetImageSuccess(cacheKey, response);
-            }
-        }, maxWidth, maxHeight, scaleType, Config.RGB_565, new ErrorListener() {
+        final ImageRequest newRequest = new ImageRequest(requestUrl, null, maxWidth, maxHeight,
+                scaleType, Config.RGB_565, new ErrorListener() {
             @Override
             public void onErrorResponse(VolleyError error) {
                 onGetImageError(cacheKey, error);
             }
         });
+        newRequest.setListener(new Listener<Bitmap>() {
+            @Override
+            public void onResponse(Bitmap response) {
+                onGetImageSuccess(cacheKey, new BitmapAndSize(response, newRequest.getImageBytes(),
+                        newRequest.getActualWidth(), newRequest.getActualHeight()));
+            }
+        });
+        return newRequest;
     }
 
     /**
@@ -265,7 +273,7 @@ public class ImageLoader {
      * @param cacheKey The cache key that is associated with the image request.
      * @param response The bitmap that was returned from the network.
      */
-    protected void onGetImageSuccess(String cacheKey, Bitmap response) {
+    protected void onGetImageSuccess(String cacheKey, BitmapAndSize response) {
         // cache the image that was fetched.
         mCache.putBitmap(cacheKey, response);
 
@@ -307,7 +315,7 @@ public class ImageLoader {
          * The most relevant bitmap for the container. If the image was in cache, the
          * Holder to use for the final bitmap (the one that pairs to the requested URL).
          */
-        private Bitmap mBitmap;
+        private BitmapAndSize mBitmap;
 
         private final ImageListener mListener;
 
@@ -323,7 +331,7 @@ public class ImageLoader {
          * @param requestUrl The requested URL for this container.
          * @param cacheKey The cache key that identifies the requested URL for this container.
          */
-        public ImageContainer(Bitmap bitmap, String requestUrl,
+        public ImageContainer(BitmapAndSize bitmap, String requestUrl,
                 String cacheKey, ImageListener listener) {
             mBitmap = bitmap;
             mRequestUrl = requestUrl;
@@ -351,7 +359,9 @@ public class ImageLoader {
                 if (request != null) {
                     request.removeContainerAndCancelIfNecessary(this);
                     if (request.mContainers.size() == 0) {
-                        mBatchedResponses.remove(mCacheKey);
+                        synchronized (mBatchedResponses) {
+                            mBatchedResponses.remove(mCacheKey);
+                        }
                     }
                 }
             }
@@ -360,7 +370,7 @@ public class ImageLoader {
         /**
          * Returns the bitmap associated with the request URL if it has been loaded, null otherwise.
          */
-        public Bitmap getBitmap() {
+        public BitmapAndSize getBitmap() {
             return mBitmap;
         }
 
@@ -381,7 +391,7 @@ public class ImageLoader {
         private final Request<?> mRequest;
 
         /** The result of the request being tracked by this item */
-        private Bitmap mResponseBitmap;
+        private BitmapAndSize mResponseBitmap;
 
         /** Error if one occurred for this response */
         private VolleyError mError;
@@ -444,31 +454,35 @@ public class ImageLoader {
      * @param error The volley error associated with the request (if applicable).
      */
     private void batchResponse(String cacheKey, BatchedImageRequest request) {
-        mBatchedResponses.put(cacheKey, request);
+        synchronized (mBatchedResponses) {
+            mBatchedResponses.put(cacheKey, request);
+        }
         // If we don't already have a batch delivery runnable in flight, make a new one.
         // Note that this will be used to deliver responses to all callers in mBatchedResponses.
         if (mRunnable == null) {
             mRunnable = new Runnable() {
                 @Override
                 public void run() {
-                    for (BatchedImageRequest bir : mBatchedResponses.values()) {
-                        for (ImageContainer container : bir.mContainers) {
-                            // If one of the callers in the batched request canceled the request
-                            // after the response was received but before it was delivered,
-                            // skip them.
-                            if (container.mListener == null) {
-                                continue;
-                            }
-                            if (bir.getError() == null) {
-                                container.mBitmap = bir.mResponseBitmap;
-                                container.mListener.onResponse(container, false);
-                            } else {
-                                container.mListener.onErrorResponse(bir.getError());
+                    synchronized (mBatchedResponses) {
+                        for (BatchedImageRequest bir : mBatchedResponses.values()) {
+                            for (ImageContainer container : bir.mContainers) {
+                                // If one of the callers in the batched request canceled the request
+                                // after the response was received but before it was delivered,
+                                // skip them.
+                                if (container.mListener == null) {
+                                    continue;
+                                }
+                                if (bir.getError() == null) {
+                                    container.mBitmap = bir.mResponseBitmap;
+                                    container.mListener.onResponse(container, false);
+                                } else {
+                                    container.mListener.onErrorResponse(bir.getError());
+                                }
                             }
                         }
+                        mBatchedResponses.clear();
+                        mRunnable = null;
                     }
-                    mBatchedResponses.clear();
-                    mRunnable = null;
                 }
 
             };

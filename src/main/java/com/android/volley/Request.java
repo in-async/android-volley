@@ -68,7 +68,7 @@ public abstract class Request<T> implements Comparable<Request<T>> {
 
     /** URL of this request. */
     private final String mUrl;
-    
+
     /** The redirect url to use for 3xx http responses */
     private String mRedirectUrl;
 
@@ -289,26 +289,28 @@ public abstract class Request<T> implements Comparable<Request<T>> {
     public String getUrl() {
         return (mRedirectUrl != null) ? mRedirectUrl : mUrl;
     }
-    
+
     /**
      * Returns the URL of the request before any redirects have occurred.
      */
     public String getOriginUrl() {
     	return mUrl;
     }
-    
+
     /**
      * Sets the redirect url to handle 3xx http responses.
      */
     public void setRedirectUrl(String redirectUrl) {
-    	mRedirectUrl = redirectUrl;
+        mRedirectUrl = redirectUrl;
     }
+    public String getRedirectUrl() { return mRedirectUrl; }
 
     /**
      * Returns the cache key for this request.  By default, this is the URL.
      */
     public String getCacheKey() {
-        return getUrl();
+//        return getUrl();
+        return getOriginUrl();
     }
 
     /**
@@ -515,7 +517,7 @@ public abstract class Request<T> implements Comparable<Request<T>> {
     }
 
     /**
-     * Returns the {@link Priority} of this request; {@link Priority#NORMAL} by default.
+     * Returns the {@link com.android.volley.Request.Priority} of this request; {@link com.android.volley.Request.Priority#NORMAL} by default.
      */
     public Priority getPriority() {
         return Priority.NORMAL;

@@ -104,7 +104,7 @@ public class BasicNetwork implements Network {
                     Entry entry = request.getCacheEntry();
                     if (entry == null) {
                         return new NetworkResponse(HttpStatus.SC_NOT_MODIFIED, null,
-                                responseHeaders, true,
+                                responseHeaders, request.getUrl(), true,
                                 SystemClock.elapsedRealtime() - requestStart);
                     }
 
@@ -114,7 +114,7 @@ public class BasicNetwork implements Network {
                     // http://www.w3.org/Protocols/rfc2616/rfc2616-sec10.html#sec10.3.5
                     entry.responseHeaders.putAll(responseHeaders);
                     return new NetworkResponse(HttpStatus.SC_NOT_MODIFIED, entry.data,
-                            entry.responseHeaders, true,
+                            entry.responseHeaders, request.getUrl(), true,
                             SystemClock.elapsedRealtime() - requestStart);
                 }
                 
@@ -140,7 +140,7 @@ public class BasicNetwork implements Network {
                 if (statusCode < 200 || statusCode > 299) {
                     throw new IOException();
                 }
-                return new NetworkResponse(statusCode, responseContents, responseHeaders, false,
+                return new NetworkResponse(statusCode, responseContents, responseHeaders, request.getUrl(), false,
                         SystemClock.elapsedRealtime() - requestStart);
             } catch (SocketTimeoutException e) {
                 attemptRetryOnException("socket", request, new TimeoutError());
@@ -164,13 +164,16 @@ public class BasicNetwork implements Network {
                 }
                 if (responseContents != null) {
                     networkResponse = new NetworkResponse(statusCode, responseContents,
-                            responseHeaders, false, SystemClock.elapsedRealtime() - requestStart);
+                            responseHeaders, request.getUrl(), false, SystemClock.elapsedRealtime() - requestStart);
                     if (statusCode == HttpStatus.SC_UNAUTHORIZED ||
                             statusCode == HttpStatus.SC_FORBIDDEN) {
                         attemptRetryOnException("auth",
                                 request, new AuthFailureError(networkResponse));
                     } else if (statusCode == HttpStatus.SC_MOVED_PERMANENTLY || 
                     			statusCode == HttpStatus.SC_MOVED_TEMPORARILY) {
+                        // 14/06/22 HTTPS -> HTTP への場合でも、リダイレクト対応
+                        String redirectUrl = responseHeaders.get("Location");
+                        request.setRedirectUrl(redirectUrl);
                         attemptRetryOnException("redirect",
                                 request, new AuthFailureError(networkResponse));
                     } else {
@@ -227,8 +230,8 @@ public class BasicNetwork implements Network {
             headers.put("If-None-Match", entry.etag);
         }
 
-        if (entry.lastModified > 0) {
-            Date refTime = new Date(entry.lastModified);
+        if (entry.serverDate > 0) {
+            Date refTime = new Date(entry.serverDate);
             headers.put("If-Modified-Since", DateUtils.formatDate(refTime));
         }
     }
