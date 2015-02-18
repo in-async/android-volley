@@ -69,13 +69,13 @@ public class DiskBasedCache implements Cache {
     private final byte[] mBuffer = new byte[4096];
 
     /*
-        Å‘åƒLƒƒƒbƒVƒ…ƒTƒCƒY‚ğİ’è‚µ‚Ü‚·B
+        æœ€å¤§ã‚­ãƒ£ãƒƒã‚·ãƒ¥ã‚µã‚¤ã‚ºã‚’è¨­å®šã—ã¾ã™ã€‚
      */
     public void setMaxCacheSizeInBytes(int cacheSize) {
         mMaxCacheSizeInBytes = cacheSize;
     }
     /*
-        Œ»İg—p’†‚ÌƒLƒƒƒbƒVƒ…ƒTƒCƒY‚ğæ“¾‚µ‚Ü‚·B
+        ç¾åœ¨ä½¿ç”¨ä¸­ã®ã‚­ãƒ£ãƒƒã‚·ãƒ¥ã‚µã‚¤ã‚ºã‚’å–å¾—ã—ã¾ã™ã€‚
      */
     public long getCacheTotalSize() {
         return mTotalSize;
@@ -423,7 +423,7 @@ public class DiskBasedCache implements Cache {
             entry.responseHeaders = readStringStringMap(is, buff);
 
             try {
-                entry.lastModified = readLong(is);
+                entry.lastModified = readLong(is, buff);
             } catch (EOFException e) {
                 // the old cache entry format doesn't know lastModified
             }
@@ -458,10 +458,10 @@ public class DiskBasedCache implements Cache {
                 writeLong(os, serverDate);
                 writeLong(os, ttl);
                 if (softTtl == Long.MAX_VALUE) {
-                    // ƒAƒvƒŠI—¹Œã‚ÉƒLƒƒƒbƒVƒ…‚ğŠúŒÀØ‚ê‚Æ‚µ‚½‚¢ê‡‚É ttl ‚ğÅ‘å’l‚Éİ’è‚µ‚Ä‚¢‚é‚Ì‚ÅA
-                    // ‚±‚±‚Å‚Í softTtl ‚É 0 ‚Æ‹L˜^‚µAŸ‰ñ“Ç‚İæ‚è‚ÉŠúŒÀØ‚ê‚Æ‚·‚éB
-                    // ’A‚µAŸ‰ñ“Ç‚İæ‚è‚Éƒlƒbƒgƒ[ƒN‚É‚Â‚È‚ª‚Á‚Ä‚¢‚È‚¢ê‡‚ÉƒLƒƒƒbƒVƒ…‚ğ•\¦‚³‚¹‚½‚¢ˆ×A
-                    // ttl ‚Í‚»‚Ì‚Ü‚Ü‚É‚·‚é
+                    // ã‚¢ãƒ—ãƒªçµ‚äº†å¾Œã«ã‚­ãƒ£ãƒƒã‚·ãƒ¥ã‚’æœŸé™åˆ‡ã‚Œã¨ã—ãŸã„å ´åˆã« ttl ã‚’æœ€å¤§å€¤ã«è¨­å®šã—ã¦ã„ã‚‹ã®ã§ã€
+                    // ã“ã“ã§ã¯ softTtl ã« 0 ã¨è¨˜éŒ²ã—ã€æ¬¡å›èª­ã¿å–ã‚Šæ™‚ã«æœŸé™åˆ‡ã‚Œã¨ã™ã‚‹ã€‚
+                    // ä½†ã—ã€æ¬¡å›èª­ã¿å–ã‚Šæ™‚ã«ãƒãƒƒãƒˆãƒ¯ãƒ¼ã‚¯ã«ã¤ãªãŒã£ã¦ã„ãªã„å ´åˆã«ã‚­ãƒ£ãƒƒã‚·ãƒ¥ã‚’è¡¨ç¤ºã•ã›ãŸã„ç‚ºã€
+                    // ttl ã¯ãã®ã¾ã¾ã«ã™ã‚‹
                     writeLong(os, 0);
                 } else {
                     writeLong(os, softTtl);
