@@ -471,8 +471,8 @@ public class DiskBasedCache implements Cache {
                     writeLong(os, softTtl);
                 }
                 writeStringStringMap(responseHeaders, os);
-                writeLong(os, lastModified);
                 writeString(os, responseUrl);
+                writeLong(os, lastModified);
                 os.flush();
                 return true;
             } catch (IOException e) {
